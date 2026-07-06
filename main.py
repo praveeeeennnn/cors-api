@@ -8,16 +8,16 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 
-# ==========================
-# Configuration
-# ==========================
+# ==================================================
+# CONFIGURATION
+# ==================================================
 
 EMAIL = "23f2000083@ds.study.iitm.ac.in"
 
-# Q1
+# ---------------- Q1 ----------------
 ALLOWED_ORIGIN = "https://dash-rnh108.example.com"
 
-# Q2
+# ---------------- Q2 ----------------
 ISSUER = "https://idp.exam.local"
 AUDIENCE = "tds-f1cwzwuq.apps.exam.local"
 
@@ -33,25 +33,60 @@ dQIDAQAB
 -----END PUBLIC KEY-----
 """
 
+# ---------------- Q3 ----------------
+
+DEFAULTS = {
+    "port": 8000,
+    "workers": 1,
+    "debug": False,
+    "log_level": "info",
+    "api_key": "default-secret-000",
+}
+
+# config.development.yaml is empty
+YAML_CONFIG = {}
+
+# .env values
+ENV_FILE = {
+    "workers": 10,
+    "log_level": "warning",
+    "api_key": "key-0my3jzlhk0",
+}
+
+# OS env values
+OS_ENV = {
+    "workers": 10,
+    "debug": True,
+    "log_level": "error",
+}
+
+# ==================================================
+# APP
+# ==================================================
+
 app = FastAPI()
 
-# ==========================
+# ==================================================
 # CORS
-# ==========================
+# ==================================================
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[ALLOWED_ORIGIN],
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_origins=[
+        ALLOWED_ORIGIN,
+        "https://exam.sanand.workers.dev"
+    ],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ==========================
-# Middleware
-# ==========================
+# ==================================================
+# MIDDLEWARE
+# ==================================================
 
 class HeaderMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+
         start = time.perf_counter()
 
         response = await call_next(request)
@@ -66,9 +101,9 @@ class HeaderMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(HeaderMiddleware)
 
-# ==========================
-# Home
-# ==========================
+# ==================================================
+# HOME
+# ==================================================
 
 @app.get("/")
 def home():
@@ -76,29 +111,27 @@ def home():
         "message": "FastAPI Service Running"
     }
 
-# ==========================
-# Question 1
-# ==========================
+# ==================================================
+# QUESTION 1
+# ==================================================
 
 @app.get("/stats")
 def stats(values: str = Query(...)):
-    numbers = [int(x.strip()) for x in values.split(",") if x.strip()]
 
-    count = len(numbers)
-    total = sum(numbers)
+    numbers = [int(x.strip()) for x in values.split(",") if x.strip()]
 
     return {
         "email": EMAIL,
-        "count": count,
-        "sum": total,
+        "count": len(numbers),
+        "sum": sum(numbers),
         "min": min(numbers),
         "max": max(numbers),
-        "mean": total / count
+        "mean": sum(numbers) / len(numbers)
     }
 
-# ==========================
-# Question 2
-# ==========================
+# ==================================================
+# QUESTION 2
+# ==================================================
 
 class TokenRequest(BaseModel):
     token: str
@@ -128,7 +161,53 @@ def verify(data: TokenRequest):
 
         return JSONResponse(
             status_code=401,
-            content={
-                "valid": False
-            }
+            content={"valid": False}
         )
+
+# ==================================================
+# QUESTION 3
+# ==================================================
+
+@app.get("/effective-config")
+def effective_config(request: Request):
+
+    config = DEFAULTS.copy()
+
+    # YAML
+    config.update(YAML_CONFIG)
+
+    # .env
+    config.update(ENV_FILE)
+
+    # OS ENV
+    config.update(OS_ENV)
+
+    # CLI overrides
+    for item in request.query_params.getlist("set"):
+
+        if "=" not in item:
+            continue
+
+        key, value = item.split("=", 1)
+
+        key = key.strip()
+        value = value.strip()
+
+        if key in ["port", "workers"]:
+            config[key] = int(value)
+
+        elif key == "debug":
+            config[key] = value.lower() in [
+                "true",
+                "1",
+                "yes",
+                "on",
+            ]
+
+        else:
+            config[key] = value
+
+    # Hide API key
+    config["api_key"] = "****"
+
+    return config
