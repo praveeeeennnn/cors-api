@@ -1,15 +1,14 @@
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
+from fastapi.responses import PlainTextResponse
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+from collections import deque
+import time
+import uuid
 
 app = FastAPI()
 
-# Your email
 EMAIL = "23f2000083@ds.study.iitm.ac.in"
-
-# Question 5 API Key
-API_KEY = "ak_97er7aozc34h0tkccrf8j8yb"
 
 # Allow CORS
 app.add_middleware(
@@ -19,57 +18,80 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -----------------------------
-# Models
-# -----------------------------
+# Startup time
+START_TIME = time.time()
 
-class Event(BaseModel):
-    user: str
-    amount: float
-    ts: int
+# Prometheus Counter
+REQUEST_COUNTER = Counter(
+    "http_requests_total",
+    "Total HTTP requests"
+)
 
-class AnalyticsRequest(BaseModel):
-    events: List[Event]
+# Store last 500 logs
+LOGS = deque(maxlen=500)
 
-# -----------------------------
-# Home
-# -----------------------------
+
+# Middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+
+    REQUEST_COUNTER.inc()
+
+    request_id = str(uuid.uuid4())
+
+    response = await call_next(request)
+
+    LOGS.append({
+        "level": "INFO",
+        "ts": time.time(),
+        "path": request.url.path,
+        "request_id": request_id
+    })
+
+    response.headers["X-Request-ID"] = request_id
+
+    return response
+
 
 @app.get("/")
 def home():
-    return {"message": "Analytics API Running"}
+    return {
+        "message": "Production Observability API Running"
+    }
 
-# -----------------------------
-# Question 5 Endpoint
-# -----------------------------
 
-@app.post("/analytics")
-def analytics(
-    request: AnalyticsRequest,
-    x_api_key: str = Header(default=None)
-):
-    # Authenticate
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+@app.get("/work")
+def work(n: int = 1):
 
-    total_events = len(request.events)
-
-    unique_users = len({event.user for event in request.events})
-
-    revenue = 0.0
-    user_totals = {}
-
-    for event in request.events:
-        if event.amount > 0:
-            revenue += event.amount
-            user_totals[event.user] = user_totals.get(event.user, 0) + event.amount
-
-    top_user = max(user_totals, key=user_totals.get) if user_totals else ""
+    # Simulate K units of work
+    for _ in range(n):
+        pass
 
     return {
         "email": EMAIL,
-        "total_events": total_events,
-        "unique_users": unique_users,
-        "revenue": revenue,
-        "top_user": top_user
+        "done": n
     }
+
+
+@app.get("/metrics")
+def metrics():
+
+    return PlainTextResponse(
+        generate_latest().decode("utf-8"),
+        media_type=CONTENT_TYPE_LATEST
+    )
+
+
+@app.get("/healthz")
+def healthz():
+
+    return {
+        "status": "ok",
+        "uptime_s": time.time() - START_TIME
+    }
+
+
+@app.get("/logs/tail")
+def logs_tail(limit: int = 10):
+
+    return list(LOGS)[-limit:]
