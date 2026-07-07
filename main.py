@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
@@ -10,28 +10,41 @@ app = FastAPI()
 
 EMAIL = "23f2000083@ds.study.iitm.ac.in"
 
-# Allow CORS
+# -----------------------------
+# STRICT CORS (ONLY allowed origin)
+# -----------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=[
+        "https://dash-rnh108.example.com"
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "OPTIONS"],
     allow_headers=["*"],
 )
 
+# -----------------------------
 # Startup time
+# -----------------------------
 START_TIME = time.time()
 
-# Prometheus Counter
+# -----------------------------
+# Prometheus metrics
+# -----------------------------
 REQUEST_COUNTER = Counter(
     "http_requests_total",
     "Total HTTP requests"
 )
 
+# -----------------------------
 # Store last 500 logs
+# -----------------------------
 LOGS = deque(maxlen=500)
 
 
+# -----------------------------
 # Middleware
+# -----------------------------
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
 
@@ -39,7 +52,11 @@ async def log_requests(request: Request, call_next):
 
     request_id = str(uuid.uuid4())
 
+    start = time.perf_counter()
+
     response = await call_next(request)
+
+    process_time = time.perf_counter() - start
 
     LOGS.append({
         "level": "INFO",
@@ -49,10 +66,14 @@ async def log_requests(request: Request, call_next):
     })
 
     response.headers["X-Request-ID"] = request_id
+    response.headers["X-Process-Time"] = f"{process_time:.6f}"
 
     return response
 
 
+# -----------------------------
+# Home
+# -----------------------------
 @app.get("/")
 def home():
     return {
@@ -60,10 +81,31 @@ def home():
     }
 
 
+# -----------------------------
+# REQUIRED BY QUESTION 1
+# GET /stats?values=1,2,3
+# -----------------------------
+@app.get("/stats")
+def stats(values: str = Query(...)):
+
+    nums = [int(x.strip()) for x in values.split(",") if x.strip()]
+
+    return {
+        "email": EMAIL,
+        "count": len(nums),
+        "sum": sum(nums),
+        "min": min(nums),
+        "max": max(nums),
+        "mean": sum(nums) / len(nums)
+    }
+
+
+# -----------------------------
+# Work endpoint
+# -----------------------------
 @app.get("/work")
 def work(n: int = 1):
 
-    # Simulate K units of work
     for _ in range(n):
         pass
 
@@ -73,6 +115,9 @@ def work(n: int = 1):
     }
 
 
+# -----------------------------
+# Prometheus metrics
+# -----------------------------
 @app.get("/metrics")
 def metrics():
 
@@ -82,6 +127,9 @@ def metrics():
     )
 
 
+# -----------------------------
+# Health
+# -----------------------------
 @app.get("/healthz")
 def healthz():
 
@@ -91,6 +139,9 @@ def healthz():
     }
 
 
+# -----------------------------
+# Tail logs
+# -----------------------------
 @app.get("/logs/tail")
 def logs_tail(limit: int = 10):
 
