@@ -1,75 +1,59 @@
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
+import time
+import uuid
 
-app = FastAPI(title="Analytics API")
+app = FastAPI(title="CORS Aware Metrics API")
 
 EMAIL = "23f2000083@ds.study.iitm.ac.in"
-API_KEY = "ak_97er7aozc34h0tkccrf8j8yb"
 
-# CORS
+ALLOWED_ORIGIN = "https://dash-rnh108.example.com"
+
+# ----------------------------
+# STRICT CORS
+# ----------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      # You can also use https://exam.sanand.workers.dev
+    allow_origins=[ALLOWED_ORIGIN],
     allow_credentials=False,
-    allow_methods=["*"],
+    allow_methods=["GET", "OPTIONS"],
     allow_headers=["*"],
 )
 
+# ----------------------------
+# Middleware
+# ----------------------------
+@app.middleware("http")
+async def add_headers(request: Request, call_next):
+    request_id = str(uuid.uuid4())
+    start = time.perf_counter()
 
-class Event(BaseModel):
-    user: str
-    amount: float
-    ts: int
+    response = await call_next(request)
 
+    process_time = time.perf_counter() - start
 
-class AnalyticsRequest(BaseModel):
-    events: List[Event]
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Process-Time"] = f"{process_time:.6f}"
+
+    return response
 
 
 @app.get("/")
 def home():
     return {
-        "message": "Analytics API Running"
+        "message": "CORS Metrics API Running"
     }
 
 
-@app.post("/analytics")
-def analytics(
-    request: AnalyticsRequest,
-    x_api_key: str = Header(default=None)
-):
-    # Authentication
-    if x_api_key != API_KEY:
-        raise HTTPException(
-            status_code=401,
-            detail="Unauthorized"
-        )
-
-    total_events = len(request.events)
-
-    unique_users = len(set(event.user for event in request.events))
-
-    revenue = 0.0
-    user_totals = {}
-
-    for event in request.events:
-        if event.amount > 0:
-            revenue += event.amount
-            user_totals[event.user] = (
-                user_totals.get(event.user, 0.0)
-                + event.amount
-            )
-
-    top_user = ""
-    if user_totals:
-        top_user = max(user_totals, key=user_totals.get)
+@app.get("/stats")
+def stats(values: str = Query(...)):
+    nums = [int(x.strip()) for x in values.split(",") if x.strip()]
 
     return {
         "email": EMAIL,
-        "total_events": total_events,
-        "unique_users": unique_users,
-        "revenue": revenue,
-        "top_user": top_user,
+        "count": len(nums),
+        "sum": sum(nums),
+        "min": min(nums),
+        "max": max(nums),
+        "mean": sum(nums) / len(nums)
     }
