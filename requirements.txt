@@ -3,6 +3,3 @@ uvicorn
 pydantic
 PyJWT
 cryptography
-python-dotenv
-PyYAML
-prometheus-client
