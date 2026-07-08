@@ -1,6 +1,4 @@
 fastapi
 uvicorn
-pyjwt
+PyJWT
 cryptography
-pyyaml
-python-dotenv
