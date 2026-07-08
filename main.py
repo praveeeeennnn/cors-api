@@ -19,11 +19,14 @@ EMAIL = "23f2000083@ds.study.iitm.ac.in"
 # CORS
 # ============================================================
 
-ALLOWED_ORIGIN = "https://dash-rnh108.example.com"
+ALLOWED_ORIGINS = [
+    "https://dash-rnh108.example.com",
+    "THE_Q3_ORIGIN_HERE"
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[ALLOWED_ORIGIN],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
