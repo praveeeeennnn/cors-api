@@ -6,6 +6,8 @@ import jwt
 from cryptography.hazmat.primitives import serialization
 import uuid
 import time
+import os
+from typing import List
 
 app = FastAPI(title="TDS Exam API")
 
@@ -119,3 +121,74 @@ def verify(request: VerifyRequest):
             status_code=401,
             content={"valid": False},
         )
+    
+  # ============================================================
+# Question 3
+# ============================================================
+
+DEFAULTS = {
+    "port": 8000,
+    "workers": 1,
+    "debug": False,
+    "log_level": "info",
+    "api_key": "default-secret-000",
+}
+
+DOTENV = {
+    "workers": 10,                 # NUM_WORKERS
+    "log_level": "warning",        # APP_LOG_LEVEL
+    "api_key": "key-0my3jzlhk0",   # APP_API_KEY
+}
+
+
+def to_bool(value):
+    return str(value).lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+
+
+@app.get("/effective-config")
+def effective_config(set: List[str] = Query(default=[])):
+    config = DEFAULTS.copy()
+
+    # config.development.yaml is empty
+
+    # .env layer
+    config.update(DOTENV)
+
+    # OS Environment (APP_* prefix)
+    if os.getenv("APP_WORKERS"):
+        config["workers"] = int(os.getenv("APP_WORKERS"))
+
+    if os.getenv("APP_DEBUG"):
+        config["debug"] = to_bool(os.getenv("APP_DEBUG"))
+
+    if os.getenv("APP_LOG_LEVEL"):
+        config["log_level"] = os.getenv("APP_LOG_LEVEL")
+
+    if os.getenv("APP_API_KEY"):
+        config["api_key"] = os.getenv("APP_API_KEY")
+
+    # CLI overrides
+    for item in set:
+        if "=" not in item:
+            continue
+
+        key, value = item.split("=", 1)
+
+        if key in ("port", "workers"):
+            config[key] = int(value)
+
+        elif key == "debug":
+            config[key] = to_bool(value)
+
+        else:
+            config[key] = value
+
+    # Never expose secrets
+    config["api_key"] = "****"
+
+    return config
