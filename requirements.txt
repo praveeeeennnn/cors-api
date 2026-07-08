@@ -1,5 +1,4 @@
 fastapi
 uvicorn
-prometheus_client
-pyjwt[crypto]
+PyJWT
 cryptography
